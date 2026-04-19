@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Overview — LLM Usage{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Overview</h4>
+  <form class="d-flex gap-2" method="get">
+    <input type="date" name="from" class="form-control form-control-sm" value="{{ date_from }}">
+    <input type="date" name="to" class="form-control form-control-sm" value="{{ date_to }}">
+    <button class="btn btn-sm btn-primary">Filter</button>
+  </form>
+</div>
+
+<div class="row g-3 mb-4">
+  {% set kpis = [
+    ("Total Requests", summary.total_requests, ""),
+    ("Total Tokens", summary.total_tokens | int, ""),
+    ("Avg Latency", (summary.avg_latency_ms | round(0) | int)|string + " ms", ""),
+    ("Avg Tokens/sec", summary.avg_tokens_per_second, ""),
+    ("Avg Quality Score", summary.avg_quality_score if summary.avg_quality_score else "—", "/5"),
+  ] %}
+  {% for label, value, suffix in kpis %}
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="card kpi-card p-3 h-100">
+      <div class="kpi-label">{{ label }}</div>
+      <div class="kpi-value">{{ value }}{{ suffix }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-8">
+    <div class="card p-3">
+      <h6 class="mb-3">Requests per Day</h6>
+      <div class="chart-container"><canvas id="requestsChart"></canvas></div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card p-3">
+      <h6 class="mb-3">By Source App</h6>
+      <div class="chart-container"><canvas id="sourceChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 mb-4">
+  <h6 class="mb-3">Token Usage by Model</h6>
+  <div class="chart-container"><canvas id="tokenChart"></canvas></div>
+</div>
+
+<div class="card p-3">
+  <h6 class="mb-3">Model Summary</h6>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover">
+      <thead><tr>
+        <th>Model</th><th>Requests</th><th>Tokens</th>
+        <th>Avg Latency (ms)</th><th>Avg TPS</th><th>Avg Quality</th>
+      </tr></thead>
+      <tbody>
+        {% for m in model_stats %}
+        <tr>
+          <td><span class="badge-model">{{ m.model_name }}</span></td>
+          <td>{{ m.total_requests }}</td>
+          <td>{{ m.total_tokens }}</td>
+          <td>{{ m.avg_latency_ms }}</td>
+          <td>{{ m.avg_tokens_per_second }}</td>
+          <td>{{ m.avg_quality_score or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const labels = {{ daily_labels_json | safe }};
+const dailyData = {{ daily_totals_json | safe }};
+const sourceDist = {{ source_dist_json | safe }};
+const modelStats = {{ model_stats_json | safe }};
+
+new Chart(document.getElementById("requestsChart"), {
+  type: "line",
+  data: {
+    labels,
+    datasets: [{
+      label: "Requests",
+      data: dailyData.map(d => d.requests),
+      borderColor: "#0d6efd", backgroundColor: "rgba(13,110,253,.1)", fill: true, tension: 0.3,
+    }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+});
+
+new Chart(document.getElementById("sourceChart"), {
+  type: "doughnut",
+  data: {
+    labels: sourceDist.map(d => d.source_app),
+    datasets: [{ data: sourceDist.map(d => d.count), backgroundColor: ["#0d6efd","#20c997","#fd7e14","#6f42c1"] }]
+  },
+  options: { responsive: true, maintainAspectRatio: false }
+});
+
+new Chart(document.getElementById("tokenChart"), {
+  type: "bar",
+  data: {
+    labels: modelStats.map(m => m.model_name),
+    datasets: [
+      { label: "Total Tokens", data: modelStats.map(m => m.total_tokens), backgroundColor: "#0d6efd" }
+    ]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+});
+</script>
+{% endblock %}

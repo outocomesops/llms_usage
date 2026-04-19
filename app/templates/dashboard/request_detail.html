@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Request Detail — LLM Usage{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <a href="/requests" class="btn btn-sm btn-outline-secondary">&larr; Back to Requests</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-4">
+    <div class="card p-3 mb-3">
+      <h6>Metadata</h6>
+      <table class="table table-sm mb-0">
+        <tr><td class="text-muted">ID</td><td class="font-monospace" style="font-size:.8rem">{{ req.id }}</td></tr>
+        <tr><td class="text-muted">Time</td><td>{{ req.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td></tr>
+        <tr><td class="text-muted">Model</td><td><span class="badge-model">{{ req.model_name }}</span></td></tr>
+        <tr><td class="text-muted">Source App</td><td>{{ req.source_app or "—" }}</td></tr>
+        <tr><td class="text-muted">Integration</td><td>{{ req.integration_type or "—" }}</td></tr>
+        <tr><td class="text-muted">Endpoint</td><td>{{ req.endpoint or "—" }}</td></tr>
+        <tr><td class="text-muted">Status</td><td>{{ req.status_code or "—" }}</td></tr>
+      </table>
+    </div>
+
+    <div class="card p-3 mb-3">
+      <h6>Performance</h6>
+      <table class="table table-sm mb-0">
+        <tr><td class="text-muted">Prompt Tokens</td><td>{{ req.prompt_tokens or "—" }}</td></tr>
+        <tr><td class="text-muted">Completion Tokens</td><td>{{ req.completion_tokens or "—" }}</td></tr>
+        <tr><td class="text-muted">Total Tokens</td><td>{{ req.total_tokens or "—" }}</td></tr>
+        <tr><td class="text-muted">Latency</td><td>{{ req.total_latency_ms or "—" }} ms</td></tr>
+        <tr><td class="text-muted">Time to First Token</td><td>{{ req.time_to_first_token_ms or "—" }} ms</td></tr>
+        <tr><td class="text-muted">Tokens / sec</td><td>{{ req.tokens_per_second | round(2) if req.tokens_per_second else "—" }}</td></tr>
+      </table>
+    </div>
+
+    {% if req.evaluation %}
+    <div class="card p-3 mb-3">
+      <h6>Quality Evaluation</h6>
+      <table class="table table-sm mb-0">
+        <tr><td class="text-muted">Judge Model</td><td>{{ req.evaluation.judge_model }}</td></tr>
+        <tr><td class="text-muted">Coherence</td><td>{{ req.evaluation.coherence_score }}/5</td></tr>
+        <tr><td class="text-muted">Relevance</td><td>{{ req.evaluation.relevance_score }}/5</td></tr>
+        <tr><td class="text-muted">Fluency</td><td>{{ req.evaluation.fluency_score }}/5</td></tr>
+        <tr><td class="text-muted">Overall</td><td><strong>{{ req.evaluation.overall_score }}/5</strong></td></tr>
+      </table>
+      {% if req.evaluation.judge_reasoning %}
+      <p class="text-muted small mt-2 mb-0">{{ req.evaluation.judge_reasoning }}</p>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="card p-3 mb-3">
+      <h6>Quality Evaluation</h6>
+      <p class="text-muted small">No evaluation yet.</p>
+      <button id="evalBtn" class="btn btn-sm btn-outline-primary">Run Evaluation</button>
+    </div>
+    {% endif %}
+
+    {% if req.feedback %}
+    <div class="card p-3">
+      <h6>User Feedback</h6>
+      <p class="mb-0">Rating: <strong>{{ req.feedback.rating }}</strong></p>
+      {% if req.feedback.comment %}<p class="text-muted small">{{ req.feedback.comment }}</p>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card p-3 mb-3">
+      <h6>Prompt</h6>
+      <pre class="bg-light p-3 rounded" style="white-space:pre-wrap;max-height:300px;overflow-y:auto;font-size:.85rem">{{ req.prompt_text or "(not stored)" }}</pre>
+    </div>
+    <div class="card p-3">
+      <h6>Completion</h6>
+      <pre class="bg-light p-3 rounded" style="white-space:pre-wrap;max-height:400px;overflow-y:auto;font-size:.85rem">{{ req.completion_text or "(not stored)" }}</pre>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const evalBtn = document.getElementById("evalBtn");
+if (evalBtn) {
+  evalBtn.addEventListener("click", async () => {
+    evalBtn.disabled = true;
+    evalBtn.textContent = "Running…";
+    try {
+      const res = await fetch("/api/v1/evaluate?request_id={{ req.id }}", { method: "POST" });
+      if (res.ok) { location.reload(); }
+      else { evalBtn.textContent = "Failed — try again"; evalBtn.disabled = false; }
+    } catch { evalBtn.textContent = "Error"; evalBtn.disabled = false; }
+  });
+}
+</script>
+{% endblock %}

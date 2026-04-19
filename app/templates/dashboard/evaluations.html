@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Evaluations — LLM Usage{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Quality Evaluations</h4>
+  <form class="d-flex gap-2" method="get">
+    <input type="date" name="from" class="form-control form-control-sm" value="{{ date_from }}">
+    <input type="date" name="to" class="form-control form-control-sm" value="{{ date_to }}">
+    <button class="btn btn-sm btn-primary">Filter</button>
+  </form>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-8">
+    <div class="card p-3">
+      <h6 class="mb-3">Coherence vs Relevance (bubble = overall score)</h6>
+      <div class="chart-container"><canvas id="scatterChart"></canvas></div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card p-3">
+      <h6 class="mb-3">Lowest Quality Requests</h6>
+      <div class="list-group list-group-flush">
+        {% for item in lowest %}
+        <a href="/requests/{{ item.id }}" class="list-group-item list-group-item-action py-2">
+          <div class="d-flex justify-content-between">
+            <span class="badge-model">{{ item.model_name }}</span>
+            <strong class="text-danger">{{ item.evaluation.overall_score | round(1) }}/5</strong>
+          </div>
+          <small class="text-muted">{{ item.created_at[:16] }}</small>
+          {% if item.evaluation.judge_reasoning %}
+          <p class="mb-0 small text-muted text-truncate">{{ item.evaluation.judge_reasoning }}</p>
+          {% endif %}
+        </a>
+        {% else %}
+        <p class="text-muted small p-2">No evaluations yet.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const scatterData = {{ scatter_json | safe }};
+const COLORS = ["#0d6efd","#20c997","#fd7e14","#6f42c1","#dc3545"];
+const models = [...new Set(scatterData.map(d => d.model))];
+
+const datasets = models.map((model, i) => ({
+  label: model,
+  data: scatterData
+    .filter(d => d.model === model)
+    .map(d => ({ x: d.x, y: d.y, r: Math.max(4, d.overall * 3) })),
+  backgroundColor: COLORS[i % COLORS.length] + "99",
+  borderColor: COLORS[i % COLORS.length],
+}));
+
+new Chart(document.getElementById("scatterChart"), {
+  type: "bubble",
+  data: { datasets },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { min: 0, max: 5.5, title: { display: true, text: "Coherence" } },
+      y: { min: 0, max: 5.5, title: { display: true, text: "Relevance" } },
+    }
+  }
+});
+</script>
+{% endblock %}

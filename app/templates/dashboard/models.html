@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Models — LLM Usage{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Model Breakdown</h4>
+  <form class="d-flex gap-2" method="get">
+    <input type="date" name="from" class="form-control form-control-sm" value="{{ date_from }}">
+    <input type="date" name="to" class="form-control form-control-sm" value="{{ date_to }}">
+    <button class="btn btn-sm btn-primary">Filter</button>
+  </form>
+</div>
+
+<div class="card p-3 mb-4">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover">
+      <thead><tr>
+        <th>Model</th><th>Requests</th><th>Total Tokens</th>
+        <th>Avg Latency (ms)</th><th>Avg TPS</th><th>Avg Quality Score</th>
+      </tr></thead>
+      <tbody>
+        {% for m in model_stats %}
+        <tr>
+          <td><span class="badge-model">{{ m.model_name }}</span></td>
+          <td>{{ m.total_requests }}</td>
+          <td>{{ m.total_tokens }}</td>
+          <td>{{ m.avg_latency_ms }}</td>
+          <td>{{ m.avg_tokens_per_second }}</td>
+          <td>{{ m.avg_quality_score or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card p-3">
+      <h6 class="mb-3">Latency by Model (ms)</h6>
+      <div class="chart-container"><canvas id="latencyChart"></canvas></div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card p-3">
+      <h6 class="mb-3">Tokens per Second by Model</h6>
+      <div class="chart-container"><canvas id="tpsChart"></canvas></div>
+    </div>
+  </div>
+  <div class="col-lg-12">
+    <div class="card p-3">
+      <h6 class="mb-3">Daily Requests per Model</h6>
+      <div class="chart-container"><canvas id="dailyModelChart"></canvas></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const modelStats = {{ model_stats_json | safe }};
+const timeseries = {{ timeseries_json | safe }};
+const COLORS = ["#0d6efd","#20c997","#fd7e14","#6f42c1","#dc3545","#ffc107"];
+
+new Chart(document.getElementById("latencyChart"), {
+  type: "bar",
+  data: {
+    labels: modelStats.map(m => m.model_name),
+    datasets: [{ label: "Avg Latency (ms)", data: modelStats.map(m => m.avg_latency_ms), backgroundColor: "#0d6efd" }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+});
+
+new Chart(document.getElementById("tpsChart"), {
+  type: "bar",
+  data: {
+    labels: modelStats.map(m => m.model_name),
+    datasets: [{ label: "Avg TPS", data: modelStats.map(m => m.avg_tokens_per_second), backgroundColor: "#20c997" }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+});
+
+// Build per-model daily series
+const models = [...new Set(timeseries.map(r => r.model_name))];
+const days = [...new Set(timeseries.map(r => r.day))].sort();
+const datasets = models.map((model, i) => ({
+  label: model,
+  data: days.map(day => {
+    const row = timeseries.find(r => r.model_name === model && r.day === day);
+    return row ? row.requests : 0;
+  }),
+  borderColor: COLORS[i % COLORS.length],
+  backgroundColor: COLORS[i % COLORS.length] + "33",
+  fill: false, tension: 0.3,
+}));
+
+new Chart(document.getElementById("dailyModelChart"), {
+  type: "line",
+  data: { labels: days, datasets },
+  options: { responsive: true, maintainAspectRatio: false }
+});
+</script>
+{% endblock %}

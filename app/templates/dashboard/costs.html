@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Cost Comparison — LLM Usage{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Cost Comparison</h4>
+  <form class="d-flex gap-2" method="get">
+    <input type="date" name="from" class="form-control form-control-sm" value="{{ date_from }}">
+    <input type="date" name="to" class="form-control form-control-sm" value="{{ date_to }}">
+    <button class="btn btn-sm btn-primary">Filter</button>
+  </form>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card kpi-card p-3 h-100">
+      <div class="kpi-label">On-Premise Cost (period)</div>
+      <div class="kpi-value">${{ report.onprem_total_usd }}</div>
+      <small class="text-muted">Hardware amortization + electricity</small>
+    </div>
+  </div>
+  {% for provider, cost in report.cloud_totals_usd.items() %}
+  <div class="col-md-4">
+    <div class="card kpi-card p-3 h-100 border-primary">
+      <div class="kpi-label">{{ provider }} (hypothetical)</div>
+      <div class="kpi-value text-primary">${{ cost }}</div>
+      <small class="text-muted">
+        {% if cost > report.onprem_total_usd %}
+        Saved ${{ (cost - report.onprem_total_usd) | round(4) }} vs cloud
+        {% else %}
+        Cloud would be cheaper by ${{ (report.onprem_total_usd - cost) | round(4) }}
+        {% endif %}
+      </small>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card p-3 mb-4">
+  <h6 class="mb-3">Cost by Model</h6>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover">
+      <thead>
+        <tr>
+          <th>Model</th><th>Requests</th>
+          <th>Prompt Tokens</th><th>Completion Tokens</th>
+          <th>On-Prem Cost ($)</th>
+          {% if report.model_breakdown %}
+            {% for provider in report.model_breakdown[0].cloud_costs_usd.keys() %}
+            <th>{{ provider }} ($)</th>
+            {% endfor %}
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in report.model_breakdown %}
+        <tr>
+          <td><span class="badge-model">{{ m.model_name }}</span></td>
+          <td>{{ m.total_requests }}</td>
+          <td>{{ m.total_prompt_tokens }}</td>
+          <td>{{ m.total_completion_tokens }}</td>
+          <td>{{ m.onprem_cost_usd }}</td>
+          {% for cost in m.cloud_costs_usd.values() %}
+          <td>{{ cost }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card p-3">
+  <h6 class="mb-3">On-Prem vs Cloud Cost Comparison</h6>
+  <div class="chart-container"><canvas id="costChart"></canvas></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const report = {{ report_json | safe }};
+const modelNames = report.model_breakdown.map(m => m.model_name);
+const onpremCosts = report.model_breakdown.map(m => m.onprem_cost_usd);
+
+const cloudProviders = report.model_breakdown.length > 0
+  ? Object.keys(report.model_breakdown[0].cloud_costs_usd)
+  : [];
+
+const COLORS = ["#0d6efd","#20c997","#fd7e14","#6f42c1","#dc3545"];
+
+const datasets = [
+  { label: "On-Premise", data: onpremCosts, backgroundColor: "#6c757d" },
+  ...cloudProviders.map((p, i) => ({
+    label: p,
+    data: report.model_breakdown.map(m => m.cloud_costs_usd[p] || 0),
+    backgroundColor: COLORS[i % COLORS.length],
+  }))
+];
+
+new Chart(document.getElementById("costChart"), {
+  type: "bar",
+  data: { labels: modelNames, datasets },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: { y: { beginAtZero: true, title: { display: true, text: "USD" } } }
+  }
+});
+</script>
+{% endblock %}
