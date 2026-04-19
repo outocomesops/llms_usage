@@ -102,3 +102,43 @@ All config via `.env` (copy `.env.example`). Key vars:
 | `JUDGE_AUTO_EVALUATE` | `true` | Enable background evaluation sweep |
 | `HARDWARE_COST_USD` | `2000` | On-prem hardware purchase price |
 | `ELECTRICITY_COST_KWH` | `0.12` | USD per kWh |
+
+---
+
+## Session Log — 2026-04-19
+
+### Changes Made
+- Built the entire project from scratch in a single session (empty repo → fully functional app)
+- Implemented Flask app factory with three-tier config (Dev/Prod/Test)
+- Created five SQLAlchemy models: `LLMRequest`, `UserFeedback`, `LLMEvaluation`, `CloudPricing`, `OnPremConfig`
+- Built Ollama proxy blueprint handling both streaming (NDJSON passthrough) and buffered responses
+- Implemented four service modules: Ollama client, cost calculator, LLM-as-judge, stats aggregator
+- Added REST API with 10 endpoints covering requests, stats, feedback, evaluation, and cost comparison
+- Added LangChain `BaseCallbackHandler` as an alternative zero-proxy integration path
+- Built five-page server-rendered dashboard with Chart.js (overview, models, request log, costs, evaluations)
+- Added inline thumbs-up/down feedback widget and on-demand "Run Evaluation" button in request detail view
+- Wrote 17 pytest tests (models, API, cost calculator) — all passing, zero warnings
+- Seeded cloud pricing for 7 models across OpenAI, Anthropic, and Google
+- Initialized Alembic migrations and pushed to GitHub with 7 atomic commits
+
+### Decisions & Rationale
+- **Proxy as primary integration**: apps redirect one URL (`localhost:11434` → `localhost:8080/proxy`); zero changes to LangChain/LlamaIndex app code
+- **Judge bypasses proxy**: `ollama_client.py` calls Ollama's native port directly to prevent judge evaluations from inflating usage metrics
+- **Daemon thread for auto-eval**: avoids Celery/Redis dependency for v1; thread is easily swapped later via `start_background_evaluator()` in `judge_service.py`
+- **Server-side Jinja2 + Chart.js**: no frontend build toolchain; chart data embedded as JSON blobs at render time — fast cold start, easy to extend
+- **SQLite default, PostgreSQL-ready**: only `DATABASE_URL` changes; all ORM queries are dialect-agnostic
+- **`integration_type` column**: both proxy and callback routes write to `LLMRequest`, allowing unified querying regardless of how apps connect
+
+### Known Issues / TODOs
+- `psycopg2-binary` commented out in `requirements.txt` — Windows requires C build tools; install separately when moving to PostgreSQL
+- No authentication on any endpoint — fine for local use, add Flask-Login before any network exposure
+- LangChain callback token counts depend on Ollama returning `prompt_eval_count`/`eval_count` in `generation_info`; some model/LangChain version combos may return `None`
+- Dashboard date filter uses naive UTC datetimes; if the host machine is not UTC, chart day boundaries may be off by timezone offset
+- `tiktoken` is installed but not yet used for token counting — Ollama's own counts are used instead; tiktoken is available as a fallback if needed
+
+### Next Session Starting Point
+- Connect a real LangChain app to the proxy and verify end-to-end data flow populates the dashboard
+- Decide on the two specific Ollama model names in use (currently auto-detected from `/api/tags`)
+- Consider adding a `source_app` filter to the dashboard Overview page
+- Evaluate whether to add auth (Flask-Login) before connecting from external apps
+- Focus files: `app/proxy/middleware.py` (data quality), `app/dashboard/routes.py` (UX improvements)
