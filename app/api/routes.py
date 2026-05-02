@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, UTC
 
-from flask import Blueprint, jsonify, request
+import requests as http_client
+from flask import Blueprint, current_app, jsonify, request
 
 from app.extensions import db
 from app.models.request_log import LLMRequest
@@ -147,6 +148,18 @@ def cost_comparison():
     date_to = _parse_date(request.args.get("to"), datetime.now(UTC))
     report = cost_calculator.get_cost_comparison_report(date_from, date_to)
     return jsonify(report)
+
+
+@api_bp.route("/live", methods=["GET"])
+def live_status():
+    """Currently loaded Ollama models from /api/ps — does not require proxy traffic."""
+    base_url = current_app.config["OLLAMA_BASE_URL"]
+    try:
+        resp = http_client.get(f"{base_url}/api/ps", timeout=3)
+        resp.raise_for_status()
+        return jsonify({"status": "ok", "models": resp.json().get("models", [])})
+    except Exception as exc:
+        return jsonify({"status": "error", "error": str(exc), "models": []})
 
 
 @api_bp.route("/ingest", methods=["POST"])

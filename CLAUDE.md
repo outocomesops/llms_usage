@@ -105,6 +105,31 @@ All config via `.env` (copy `.env.example`). Key vars:
 
 ---
 
+## Session Log — 2026-05-02
+
+### Changes Made
+- Added `GET /api/v1/live` endpoint that polls Ollama's `/api/ps` and returns currently loaded models — works without any proxy traffic
+- Added **Live Ollama Status** card to the dashboard overview: auto-refreshes every 3 seconds, shows model name, VRAM usage, total size, and expiry time
+- Added **setup banner** on the overview page that appears when zero requests have been recorded; explains that traffic must be routed through `localhost:8080/proxy` instead of `localhost:11434`, with a dismiss button
+
+### Decisions & Rationale
+- **`/api/ps` polling over network capture**: Ollama exposes which models are loaded in VRAM via `/api/ps`; this is the only way to show real-time model activity without requiring users to redirect their traffic first — gives immediate feedback that the app is working
+- **Setup banner conditional on `total_requests == 0`**: Only shown when there is genuinely no data, avoids noise for users who are already sending traffic through the proxy
+- **3-second poll interval**: Balances responsiveness with server load; Ollama's `/api/ps` is a cheap in-memory read
+
+### Known Issues / TODOs
+- Live panel shows model load/expiry status but cannot show token counts or prompts — that still requires proxy traffic
+- `/api/v1/live` is not authenticated; fine for localhost, add auth before network exposure
+- All prior known issues from 2026-04-19 still apply
+
+### Next Session Starting Point
+- Route a real app's traffic through `localhost:8080/proxy` and verify end-to-end data populates the dashboard
+- Consider adding a `source_app` dropdown filter to the Overview page
+- Evaluate Flask-Login auth before any network exposure
+- Focus files: `app/proxy/middleware.py` (data quality), `app/templates/dashboard/index.html` (UX)
+
+---
+
 ## Session Log — 2026-04-19
 
 ### Changes Made
